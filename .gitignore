@@ -1,0 +1,8 @@
+research/
+tools/
+exports/booth-map-tiles/
+
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

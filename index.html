@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="license" content="AGPL-3.0-only">
+    <title>제23회 국제차문화대전 인터랙티브 부스맵</title>
+    <link rel="stylesheet" href="styles.css?v=20260529-aroma-tag-merge">
+  </head>
+  <body>
+    <div class="site-disclaimer" role="note">
+      ※ 본 사이트는 공식 주최측과 무관한 비공식 정보 아카이브입니다.
+    </div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TEA WORLD FESTIVAL 2026</p>
+        <h1>제23회 국제차문화대전 부스맵</h1>
+      </div>
+      <div class="event-meta" aria-label="행사 정보">
+        <span id="eventDate"></span>
+        <span id="eventVenue"></span>
+        <a id="eventSource" href="#" target="_blank" rel="noreferrer">공식 정보</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="toolbar" aria-label="부스 검색 도구">
+        <label class="search-field">
+          <span>검색</span>
+          <input id="searchInput" type="search" placeholder="부스번호, 업체명, 분야 검색">
+        </label>
+        <label class="select-field">
+          <span>구역</span>
+          <select id="sectionFilter">
+            <option value="all">전체</option>
+          </select>
+        </label>
+        <label class="check-field">
+          <input id="gridToggle" type="checkbox">
+          <span>격자 보기</span>
+        </label>
+        <div class="stats" id="stats" aria-live="polite"></div>
+      </section>
+
+      <section class="tag-filter" aria-label="태그 검색">
+        <div class="tag-filter-head">
+          <div>
+            <strong>태그 검색</strong>
+            <span>선택한 태그 조건에 맞는 부스만 강조합니다.</span>
+          </div>
+          <div class="tag-controls">
+            <button id="clearButton" class="tag-clear-button" type="button">초기화</button>
+            <div class="tag-mode" role="group" aria-label="태그 조건">
+              <button id="tagModeOr" type="button" class="is-active">OR</button>
+              <button id="tagModeAnd" type="button">AND</button>
+            </div>
+          </div>
+        </div>
+        <div id="tagChips" class="tag-chips"></div>
+      </section>
+
+      <section class="app-grid">
+        <div class="map-region" aria-label="인터랙티브 부스 배치도">
+          <div class="map-head">
+            <div class="map-heading">
+              <p>2026 TEA WORLD FESTIVAL</p>
+              <h2>제23회 국제차문화대전 부스배치도</h2>
+            </div>
+            <div class="map-tools" aria-label="Map zoom controls">
+              <button id="zoomOutButton" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+              <button id="zoomResetButton" type="button" title="Reset zoom" aria-label="Reset zoom">
+                <span id="zoomValue">100%</span>
+              </button>
+              <button id="zoomInButton" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <div id="mapScroll" class="map-scroll" tabindex="0" aria-label="부스배치도 스크롤 영역">
+            <svg
+              id="boothMap"
+              class="booth-map"
+              viewBox="0 55 958 585"
+              role="img"
+              aria-label="제23회 국제차문화대전 Hall D 부스 배치도"
+            ></svg>
+          </div>
+        </div>
+
+        <aside class="inspector" aria-live="polite">
+          <div id="detailsPanel" class="details-panel"></div>
+        </aside>
+      </section>
+
+      <section class="results" aria-label="검색 결과">
+        <div class="section-heading">
+          <div class="section-title">
+            <h2>부스 목록</h2>
+            <p id="resultCount"></p>
+          </div>
+          <label class="sort-field">
+            <span>정렬</span>
+            <select id="boothSort">
+              <option value="booth">부스번호순</option>
+              <option value="vendor">업체명순</option>
+            </select>
+          </label>
+        </div>
+        <div id="boothList" class="booth-list"></div>
+      </section>
+    </main>
+
+    <footer class="page-disclaimer" role="contentinfo">
+      <p>본 페이지는 국제차문화대전 및 참가업체의 공식 안내 페이지가 아니며, 공식 입장과 무관합니다.</p>
+      <p>업체 정보는 공개 자료를 기반으로 AI를 활용해 정리되었으며, 일부 내용이 부정확하거나 최신 정보와 다를 수 있습니다.</p>
+      <p>정확한 정보는 각 업체의 공식 채널을 통해 확인하시기 바랍니다.</p>
+    </footer>
+
+    <script src="data/catalog.js?v=20260529-aroma-tag-merge"></script>
+    <script src="app.js?v=20260529-aroma-tag-merge"></script>
+  </body>
+</html>
