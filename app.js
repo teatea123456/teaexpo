@@ -23,6 +23,22 @@
   const MAP_DRAG_THRESHOLD = 5;
   const SEARCH_TRACK_DEBOUNCE_MS = 900;
   const MAP_INTERACTION_TRACK_DELAY_MS = 500;
+  const INTERACTION_NAMES = Object.freeze({
+    select_booth: "부스 선택",
+    toggle_tag: "태그 선택",
+    change_tag_mode: "태그 조건 변경",
+    map_zoom: "지도 확대/축소",
+    map_pan: "지도 이동",
+    toggle_grid: "격자 보기 변경",
+    filter_search: "검색",
+    filter_section: "구역 필터",
+    sort_booths: "목록 정렬",
+  });
+  const TAG_ACTION_LABELS = Object.freeze({ add: "추가", remove: "해제" });
+  const TAG_MODE_LABELS = Object.freeze({ or: "하나라도 포함", and: "모두 포함" });
+  const SELECTION_SOURCE_LABELS = Object.freeze({ map: "지도", list: "목록" });
+  const ZOOM_SOURCE_LABELS = Object.freeze({ button: "버튼", wheel: "마우스 휠", pinch: "핀치" });
+  const SORT_MODE_LABELS = Object.freeze({ booth: "부스번호순", vendor: "업체명순" });
 
   const state = {
     query: "",
@@ -151,8 +167,28 @@
     }
     window.gtag("event", eventName, {
       app_name: "teaexpo_booth_map",
+      interaction_name: INTERACTION_NAMES[eventName] || eventName,
       ...params,
     });
+  }
+
+  function labelFromMap(labels, value, fallback = "미상") {
+    return labels[value] || fallback;
+  }
+
+  function formatBoothSection(section) {
+    if (!section || section === "unknown") {
+      return "미상";
+    }
+    if (section === "all") {
+      return "전체";
+    }
+    const label = String(section);
+    return label.endsWith("구역") ? label : `${label}구역`;
+  }
+
+  function formatToggleState(enabled) {
+    return enabled ? "켜짐" : "꺼짐";
   }
 
   function currentResultCount() {
@@ -176,7 +212,7 @@
   function sendMapZoomEvent(source) {
     trackEvent("map_zoom", {
       zoom_percent: mapZoomPercent(),
-      zoom_source: source,
+      zoom_source: labelFromMap(ZOOM_SOURCE_LABELS, source),
     });
   }
 
@@ -941,8 +977,8 @@
         render({ ...scrollState, preserveTagChips: true });
         trackEvent("toggle_tag", {
           tag_name: tag,
-          tag_action: tagAction,
-          tag_mode: state.tagMode,
+          tag_action: labelFromMap(TAG_ACTION_LABELS, tagAction),
+          tag_mode: labelFromMap(TAG_MODE_LABELS, state.tagMode),
           selected_tag_count: state.selectedTags.size,
           result_count: currentResultCount(),
         });
@@ -1188,8 +1224,11 @@
     state.selectedBoothId = boothId;
     trackEvent("select_booth", {
       booth_id: boothId,
-      booth_section: booth ? booth.section : "unknown",
-      selection_source: options.source === "list" ? "list" : "map",
+      booth_section: formatBoothSection(booth ? booth.section : "unknown"),
+      selection_source: labelFromMap(
+        SELECTION_SOURCE_LABELS,
+        options.source === "list" ? "list" : "map"
+      ),
     });
     if (options.source === "list") {
       render({ ...scrollState, inspectorScrollTop: 0, scrollToDetailsTop: true });
@@ -1291,7 +1330,7 @@
       }
       render(scrollState);
       trackEvent("filter_section", {
-        booth_section: state.section,
+        booth_section: formatBoothSection(state.section),
         result_count: currentResultCount(),
       });
     });
@@ -1314,7 +1353,7 @@
       state.boothSort = event.target.value === "vendor" ? "vendor" : "booth";
       render({ ...captureScrollState(), boothListScrollTop: 0 });
       trackEvent("sort_booths", {
-        sort_mode: state.boothSort,
+        sort_mode: labelFromMap(SORT_MODE_LABELS, state.boothSort),
         result_count: currentResultCount(),
       });
     });
@@ -1324,7 +1363,7 @@
       state.showGrid = event.target.checked;
       render(scrollState);
       trackEvent("toggle_grid", {
-        grid_enabled: state.showGrid ? "true" : "false",
+        grid_enabled: formatToggleState(state.showGrid),
       });
     });
 
@@ -1335,7 +1374,7 @@
       state.tagMode = "or";
       render({ ...captureScrollState(), preserveTagChips: true });
       trackEvent("change_tag_mode", {
-        tag_mode: state.tagMode,
+        tag_mode: labelFromMap(TAG_MODE_LABELS, state.tagMode),
         selected_tag_count: state.selectedTags.size,
         result_count: currentResultCount(),
       });
@@ -1348,7 +1387,7 @@
       state.tagMode = "and";
       render({ ...captureScrollState(), preserveTagChips: true });
       trackEvent("change_tag_mode", {
-        tag_mode: state.tagMode,
+        tag_mode: labelFromMap(TAG_MODE_LABELS, state.tagMode),
         selected_tag_count: state.selectedTags.size,
         result_count: currentResultCount(),
       });
