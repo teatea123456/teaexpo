@@ -21,6 +21,8 @@
   const MAP_MAX_ZOOM = 3;
   const MAP_ZOOM_STEP = 1.2;
   const MAP_DRAG_THRESHOLD = 5;
+  const SEARCH_TRACK_DEBOUNCE_MS = 900;
+  const MAP_INTERACTION_TRACK_DELAY_MS = 500;
 
   const state = {
     query: "",
@@ -69,9 +71,14 @@
     startZoom: 1,
     suppressClick: false,
     tapBoothId: null,
+    hadPan: false,
+    hadPinchZoom: false,
   };
   let mapResizeFrame = 0;
   let mapResizeObserver = null;
+  let searchTrackTimer = 0;
+  let mapZoomTrackTimer = 0;
+  let mapPanTrackTimer = 0;
 
   const TAG_GROUPS = [
     {
@@ -136,6 +143,68 @@
       window.scrollTo(options.pageScrollX, options.pageScrollY);
       requestAnimationFrame(() => window.scrollTo(options.pageScrollX, options.pageScrollY));
     }
+  }
+
+  function trackEvent(eventName, params = {}) {
+    if (typeof window.gtag !== "function") {
+      return;
+    }
+    window.gtag("event", eventName, {
+      app_name: "teaexpo_booth_map",
+      ...params,
+    });
+  }
+
+  function currentResultCount() {
+    return filteredBooths().length;
+  }
+
+  function mapZoomPercent() {
+    return Math.round(state.mapZoom * 100);
+  }
+
+  function trackSearchInput() {
+    window.clearTimeout(searchTrackTimer);
+    searchTrackTimer = window.setTimeout(() => {
+      trackEvent("filter_search", {
+        query_length: state.query.trim().length,
+        result_count: currentResultCount(),
+      });
+    }, SEARCH_TRACK_DEBOUNCE_MS);
+  }
+
+  function sendMapZoomEvent(source) {
+    trackEvent("map_zoom", {
+      zoom_percent: mapZoomPercent(),
+      zoom_source: source,
+    });
+  }
+
+  function trackMapZoom(source, options = {}) {
+    if (options.debounce) {
+      window.clearTimeout(mapZoomTrackTimer);
+      mapZoomTrackTimer = window.setTimeout(
+        () => sendMapZoomEvent(source),
+        MAP_INTERACTION_TRACK_DELAY_MS
+      );
+      return;
+    }
+    sendMapZoomEvent(source);
+  }
+
+  function sendMapPanEvent() {
+    trackEvent("map_pan", {
+      zoom_percent: mapZoomPercent(),
+    });
+  }
+
+  function trackMapPan(options = {}) {
+    if (options.debounce) {
+      window.clearTimeout(mapPanTrackTimer);
+      mapPanTrackTimer = window.setTimeout(sendMapPanEvent, MAP_INTERACTION_TRACK_DELAY_MS);
+      return;
+    }
+    sendMapPanEvent();
   }
 
   function scrollDetailsPanelToTop() {
@@ -218,7 +287,7 @@
     const zoom = clamp(nextZoom, mapMinZoom(), MAP_MAX_ZOOM);
     if (Math.abs(zoom - previousZoom) < 0.001) {
       syncMapZoomControls();
-      return;
+      return false;
     }
 
     const rect = els.mapScroll.getBoundingClientRect();
@@ -236,14 +305,21 @@
     const nextSize = mapSize();
     els.mapScroll.scrollLeft = anchorRatioX * nextSize.width - anchorOffsetX;
     els.mapScroll.scrollTop = anchorRatioY * nextSize.height - anchorOffsetY;
+    return true;
   }
 
-  function zoomBy(factor, anchor) {
-    setMapZoom(state.mapZoom * factor, anchor);
+  function zoomBy(factor, anchor, tracking = {}) {
+    const changed = setMapZoom(state.mapZoom * factor, anchor);
+    if (changed && tracking.source) {
+      trackMapZoom(tracking.source, { debounce: tracking.debounce });
+    }
   }
 
-  function resetMapZoom() {
-    setMapZoom(1);
+  function resetMapZoom(tracking = {}) {
+    const changed = setMapZoom(1);
+    if (changed && tracking.source) {
+      trackMapZoom(tracking.source, { debounce: tracking.debounce });
+    }
   }
 
   function syncMapZoomForViewport() {
@@ -319,6 +395,8 @@
       mapGesture.lastY = event.clientY;
       mapGesture.dragDistance = 0;
       mapGesture.tapBoothId = boothTarget ? boothTarget.dataset.boothId : null;
+      mapGesture.hadPan = false;
+      mapGesture.hadPinchZoom = false;
     } else if (mapPointers.size === 2) {
       mapGesture.tapBoothId = null;
       startPinchGesture();
@@ -349,7 +427,9 @@
       const previousCenter = mapGesture.lastPinchCenter || center;
       const dx = center.clientX - previousCenter.clientX;
       const dy = center.clientY - previousCenter.clientY;
-      setMapZoom(mapGesture.startZoom * (distance / mapGesture.startDistance), center);
+      if (setMapZoom(mapGesture.startZoom * (distance / mapGesture.startDistance), center)) {
+        mapGesture.hadPinchZoom = true;
+      }
       els.mapScroll.scrollLeft -= dx;
       els.mapScroll.scrollTop -= dy;
       mapGesture.lastPinchCenter = center;
@@ -371,6 +451,7 @@
       els.mapScroll.classList.add("is-dragging");
       els.mapScroll.scrollLeft -= dx;
       els.mapScroll.scrollTop -= dy;
+      mapGesture.hadPan = true;
       event.preventDefault();
     }
   }
@@ -405,6 +486,8 @@
       return;
     }
 
+    const shouldTrackPan = mapGesture.hadPan && !tapBoothId;
+    const shouldTrackPinchZoom = mapGesture.hadPinchZoom;
     mapGesture.mode = "idle";
     mapGesture.tapBoothId = null;
     mapGesture.lastPinchCenter = null;
@@ -414,6 +497,14 @@
       selectBooth(tapBoothId, { source: "map" });
       clearMapFocus();
     }
+    if (shouldTrackPan) {
+      trackMapPan({ debounce: true });
+    }
+    if (shouldTrackPinchZoom) {
+      trackMapZoom("pinch", { debounce: true });
+    }
+    mapGesture.hadPan = false;
+    mapGesture.hadPinchZoom = false;
     if (mapGesture.suppressClick) {
       window.setTimeout(() => {
         mapGesture.suppressClick = false;
@@ -835,7 +926,9 @@
       button.setAttribute("aria-pressed", String(state.selectedTags.has(tag)));
       button.addEventListener("click", (event) => {
         const scrollState = captureScrollState();
-        if (state.selectedTags.has(tag)) {
+        const wasSelected = state.selectedTags.has(tag);
+        const tagAction = wasSelected ? "remove" : "add";
+        if (wasSelected) {
           state.selectedTags.delete(tag);
         } else {
           state.selectedTags.add(tag);
@@ -846,6 +939,13 @@
           state.selectedBoothId = null;
         }
         render({ ...scrollState, preserveTagChips: true });
+        trackEvent("toggle_tag", {
+          tag_name: tag,
+          tag_action: tagAction,
+          tag_mode: state.tagMode,
+          selected_tag_count: state.selectedTags.size,
+          result_count: currentResultCount(),
+        });
       });
       return button;
     };
@@ -1084,7 +1184,13 @@
 
   function selectBooth(boothId, options = {}) {
     const scrollState = captureScrollState();
+    const booth = boothsById.get(boothId);
     state.selectedBoothId = boothId;
+    trackEvent("select_booth", {
+      booth_id: boothId,
+      booth_section: booth ? booth.section : "unknown",
+      selection_source: options.source === "list" ? "list" : "map",
+    });
     if (options.source === "list") {
       render({ ...scrollState, inspectorScrollTop: 0, scrollToDetailsTop: true });
       return;
@@ -1110,9 +1216,13 @@
   }
 
   function bindMapZoomEvents() {
-    els.zoomOutButton.addEventListener("click", () => zoomBy(1 / MAP_ZOOM_STEP));
-    els.zoomInButton.addEventListener("click", () => zoomBy(MAP_ZOOM_STEP));
-    els.zoomResetButton.addEventListener("click", resetMapZoom);
+    els.zoomOutButton.addEventListener("click", () =>
+      zoomBy(1 / MAP_ZOOM_STEP, undefined, { source: "button" })
+    );
+    els.zoomInButton.addEventListener("click", () =>
+      zoomBy(MAP_ZOOM_STEP, undefined, { source: "button" })
+    );
+    els.zoomResetButton.addEventListener("click", () => resetMapZoom({ source: "button" }));
 
     els.mapScroll.addEventListener(
       "wheel",
@@ -1121,10 +1231,14 @@
           return;
         }
         event.preventDefault();
-        zoomBy(event.deltaY < 0 ? MAP_ZOOM_STEP : 1 / MAP_ZOOM_STEP, {
-          clientX: event.clientX,
-          clientY: event.clientY,
-        });
+        zoomBy(
+          event.deltaY < 0 ? MAP_ZOOM_STEP : 1 / MAP_ZOOM_STEP,
+          {
+            clientX: event.clientX,
+            clientY: event.clientY,
+          },
+          { source: "wheel", debounce: true }
+        );
       },
       { passive: false }
     );
@@ -1166,6 +1280,7 @@
         state.selectedBoothId = null;
       }
       render(scrollState);
+      trackSearchInput();
     });
 
     els.sectionFilter.addEventListener("change", (event) => {
@@ -1175,9 +1290,14 @@
         state.selectedBoothId = null;
       }
       render(scrollState);
+      trackEvent("filter_section", {
+        booth_section: state.section,
+        result_count: currentResultCount(),
+      });
     });
 
     els.clearButton.addEventListener("click", () => {
+      window.clearTimeout(searchTrackTimer);
       state.query = "";
       state.section = "all";
       state.selectedBoothId = null;
@@ -1193,22 +1313,45 @@
     els.boothSort.addEventListener("change", (event) => {
       state.boothSort = event.target.value === "vendor" ? "vendor" : "booth";
       render({ ...captureScrollState(), boothListScrollTop: 0 });
+      trackEvent("sort_booths", {
+        sort_mode: state.boothSort,
+        result_count: currentResultCount(),
+      });
     });
 
     els.gridToggle.addEventListener("change", (event) => {
       const scrollState = captureScrollState();
       state.showGrid = event.target.checked;
       render(scrollState);
+      trackEvent("toggle_grid", {
+        grid_enabled: state.showGrid ? "true" : "false",
+      });
     });
 
     els.tagModeOr.addEventListener("click", () => {
+      if (state.tagMode === "or") {
+        return;
+      }
       state.tagMode = "or";
       render({ ...captureScrollState(), preserveTagChips: true });
+      trackEvent("change_tag_mode", {
+        tag_mode: state.tagMode,
+        selected_tag_count: state.selectedTags.size,
+        result_count: currentResultCount(),
+      });
     });
 
     els.tagModeAnd.addEventListener("click", () => {
+      if (state.tagMode === "and") {
+        return;
+      }
       state.tagMode = "and";
       render({ ...captureScrollState(), preserveTagChips: true });
+      trackEvent("change_tag_mode", {
+        tag_mode: state.tagMode,
+        selected_tag_count: state.selectedTags.size,
+        result_count: currentResultCount(),
+      });
     });
   }
 
